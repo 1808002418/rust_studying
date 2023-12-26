@@ -1,4 +1,3 @@
-use std::thread::sleep;
 use crate::memory::Memory;
 
 const PROGRAM_START_ADDRESS: u16 = 0x8000;
@@ -42,7 +41,7 @@ CPU以恒定的周期工作：
 */
 impl CPU {
     pub fn new() -> Self {
-        CPU { register_a: 0, register_x: 0, status: 0, memory, program_counter: 0 }
+        CPU { register_a: 0, register_x: 0, status: 0, memory: Memory::default(), program_counter: 0 }
     }
     pub fn interpret(&mut self) {
         loop {
@@ -111,6 +110,25 @@ impl CPU {
         self.memory.write(addr, data);
     }
 
+    /*
+    小端顺序读
+    */
+    pub fn memory_read_u16(&mut self, pos: u16) -> u16 {
+        let lo = self.memory_read(pos) as u16;
+        let hi = self.memory_read(pos + 1) as u16;
+        (hi << 8) | lo
+    }
+
+    /*
+    小端顺序写
+    */
+    pub fn memory_write_u16(&mut self, pos: u16, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8;
+        self.memory_write(pos, lo);
+        self.memory_write(pos + 1, hi);
+    }
+
     pub fn memory_load_program(&mut self, program: Vec<u8>) {
         self.memory.load_program(PROGRAM_START_ADDRESS, program);
         // 设置指令寄存器为程序的起始地址
@@ -119,7 +137,7 @@ impl CPU {
 }
 
 impl CPU {
-    pub fn load_and_run(&mut self,program: Vec<u8>){
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.memory_load_program(program);
         self.interpret();
     }

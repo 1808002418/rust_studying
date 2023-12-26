@@ -19,7 +19,8 @@ impl Memory {
     }
 
     // 加载程序到内存位置
-    pub fn load_program(&mut self,addr:u16, program: Vec<u8>) {
-        self.bytes[addr..(addr + program.len())].copy_from_slice(&program[..]);
+    pub fn load_program(&mut self, addr: u16, program: Vec<u8>) {
+        let offset = (addr + program.len() as u16) as usize;
+        self.bytes[addr as usize..offset].copy_from_slice(&program[..]);
     }
 }
