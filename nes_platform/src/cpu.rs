@@ -129,16 +129,31 @@ impl CPU {
         self.memory_write(pos + 1, hi);
     }
 
+    /*
+    load 方法应将程序加载到 PRG ROM 空间并将代码引用保存到 0xFFFC 存储单元中
+    */
     pub fn memory_load_program(&mut self, program: Vec<u8>) {
         self.memory.load_program(PROGRAM_START_ADDRESS, program);
         // 设置指令寄存器为程序的起始地址
-        self.program_counter = PROGRAM_START_ADDRESS;
+        // self.program_counter = PROGRAM_START_ADDRESS;
+        self.memory_write_u16(0xFFFC,PROGRAM_START_ADDRESS);
     }
 }
 
 impl CPU {
+    /*
+    复位方法应该恢复所有寄存器的状态，并用存储在0xFFFC的2字节值初始化program_counter
+    */
+    pub fn reset(&mut self) {
+        self.register_a=0;
+        self.register_x=0;
+        self.status=0;
+        self.program_counter=self.memory_read_u16(0xFFFC);
+    }
+
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.memory_load_program(program);
+        self.reset();
         self.interpret();
     }
 }
