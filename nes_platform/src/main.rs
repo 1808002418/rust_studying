@@ -49,6 +49,21 @@ mod test{
         assert_eq!(cpu.register_x, 0xc1)
     }
 
+    #[test]
+    fn test_write_u16(){
+        let mut cpu = CPU::new();
+        cpu.memory_write_u16(0xff00,0x1234);
+        assert_eq!(cpu.memory.read(0xff00),0x34);
+        assert_eq!(cpu.memory.read(0xff01),0x12);
+    }
+
+    #[test]
+    fn test_read_u16(){
+        let mut cpu=CPU::new();
+        cpu.memory.write(0xff00,0x34);
+        cpu.memory.write(0xff01,0x12);
+        assert_eq!(cpu.memory_read_u16(0xff00),0x1234);
+    }
 
 
 }
