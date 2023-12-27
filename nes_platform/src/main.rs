@@ -3,10 +3,14 @@
 #[allow(dead_code)]
 mod cpu;
 mod memory;
+mod addressing;
 
 
 use cpu::*;
 
+/**
+https://bugzmanov.github.io/nes_ebook/chapter_1.html
+*/
 fn main() {
     println!("Hello, world!");
 }
