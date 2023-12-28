@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::format;
 use crate::addressing::{AddressingMode, OpCode, OPCODE_MAP};
 use crate::memory::Memory;
 
-const PROGRAM_START_ADDRESS: u16 = 0x8000;
+const PROGRAM_START_ADDRESS: u16 = 0x0600;
 
 pub struct CPU {
     // 负载累加器
@@ -177,7 +176,6 @@ impl CPU {
 
     fn sta(&mut self, addressing_mode: &AddressingMode) {
         let address = self.get_operand_address(addressing_mode);
-        println!("address {:?}", format!(" {:x}", address));
         self.memory_write(address,self.register_a);
     }
 
@@ -255,9 +253,20 @@ impl CPU {
         self.program_counter = self.memory_read_u16(0xFFFC);
     }
 
+    pub fn run_with_callback<F>(&mut self,mut callback:F)
+    where F:FnMut(&mut CPU){
+        let ref opcodes:HashMap<u8,&'static OpCode>=*OPCODE_MAP;
+        loop {
+            callback(self);
+            // match code {  }
+        }
+    }
+    
+    
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.memory_load_program(program);
         self.reset();
         self.interpret();
     }
+    
 }
