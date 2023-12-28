@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::format;
 use crate::addressing::{AddressingMode, OpCode, OPCODE_MAP};
 use crate::memory::Memory;
 
@@ -34,6 +35,10 @@ INX - Increment X Register
 BRK - Force Interrupt
     强制中断
     操作码: $00
+STA - Store Accumulator
+    存储累加器(负载累加器),将累加器的内容存储到内存中。
+    STA $2000 存储累加器的值到绝对地址 $2000
+    操作码: $85
  */
 
 
@@ -59,6 +64,10 @@ impl CPU {
                 // LDA
                 0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
                     self.lda(&opcode.mode);
+                }
+                // STA
+                0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
+                    self.sta(&opcode.mode);
                 }
                 // TAX
                 0xAA => {
@@ -159,11 +168,19 @@ impl CPU {
         self.program_counter += 1;
         return ops_code;
     }
+
     fn lda(&mut self, addressing_mode: &AddressingMode) {
         let address = self.get_operand_address(addressing_mode);
         self.register_a = self.memory_read(address);
         self.update_zero_and_negative_flags(self.register_a);
     }
+
+    fn sta(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        println!("address {:?}", format!(" {:x}", address));
+        self.memory_write(address,self.register_a);
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);

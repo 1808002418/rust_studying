@@ -10,7 +10,7 @@ use cpu::*;
 
 /**
 https://bugzmanov.github.io/nes_ebook/chapter_1.html
-*/
+ */
 fn main() {
     println!("Hello, world!");
 }
@@ -34,6 +34,27 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert_eq!(cpu.status & 0b0000_0010, 0b10);
+    }
+
+    #[test]
+    fn test_sta_immediate() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x01,0x85, 0xff, 0x00]);
+        assert_eq!(cpu.memory_read(0xff),0x01 );
+    }
+
+    #[test]
+    fn test_sta_absolute_x() {
+        let mut cpu = CPU::new();
+        /*
+        0xa9 0x10 向负载累加器写入0x10
+        0xaa      将负载累加器的值负责到X寄存器
+        0x9d 0x00 0xff  将负载累加器的值复制到0xff10的内存位置
+        */
+        // 多字节操作数要按小端顺序写入                         // 这两个操作数要按小端顺序写入
+        cpu.load_and_run(vec![0xa9, 0x10,0xaa,0x9d,0x00,0xff, 0x00]);
+
+        assert_eq!(cpu.memory_read(0xff10),0x10 );
     }
 
     #[test]
