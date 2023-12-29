@@ -5,6 +5,9 @@ use crate::memory::Memory;
 
 const PROGRAM_START_ADDRESS: u16 = 0x0600;
 
+const STACK:u16=0x0100;
+const STACK_RESET:u8=0xfd;
+
 bitflags! {
     /// # Status Register (P) http://wiki.nesdev.com/w/index.php/Status_flags
     ///
@@ -43,6 +46,7 @@ pub struct CPU {
     // 通过按位或操作 | 和按位与操作 &，可以根据需要设置或取消设置特定的标志位，而不需要使用多个单独的变量
     pub status: CPUFlags,
     pub memory: Memory,
+    pub stack_pointer:u8,
     // 这个相当于指令寄存器
     pub program_counter: u16,
 }
@@ -82,7 +86,7 @@ CPU以恒定的周期工作：
  */
 impl CPU {
     pub fn new() -> Self {
-        CPU { register_a: 0, register_x: 0, register_y: 0, status: CPUFlags::from_bits_truncate(0b0010_0100), memory: Memory::default(), program_counter: 0 }
+        CPU { register_a: 0, register_x: 0, register_y: 0, status: CPUFlags::from_bits_truncate(0b0010_0100), memory: Memory::default(), stack_pointer: STACK_RESET, program_counter: 0 }
     }
     pub fn interpret(&mut self) {
         let ref opcodes: HashMap<u8, &'static OpCode> = *OPCODE_MAP;
@@ -358,6 +362,18 @@ impl CPU {
     }
 }
 
+impl CPU {
+    pub fn stack_pop(&mut self)->u8{
+        self.stack_pointer =self.stack_pointer.wrapping_add(1);
+        return self.memory_read(STACK + self.stack_pointer);
+    }
+
+    pub fn stack_push(&mut self,data:u8){
+
+        self.memory_write(STACK+self.stack_pointer,data);
+        self.stack_pointer=self.stack_pointer.wrapping_sub(1);
+    }
+}
 
 #[cfg(test)]
 mod test {
