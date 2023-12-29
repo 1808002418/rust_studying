@@ -1,8 +1,36 @@
 use std::collections::HashMap;
+use bitflags::bitflags;
 use crate::addressing::{AddressingMode, OpCode, OPCODE_MAP};
 use crate::memory::Memory;
 
 const PROGRAM_START_ADDRESS: u16 = 0x0600;
+
+bitflags! {
+    /// # Status Register (P) http://wiki.nesdev.com/w/index.php/Status_flags
+    ///
+    ///  7 6 5 4 3 2 1 0
+    ///  N V _ B D I Z C
+    ///  | |   | | | | +--- Carry Flag
+    ///  | |   | | | +----- Zero Flag
+    ///  | |   | | +------- Interrupt Disable
+    ///  | |   | +--------- Decimal Mode (not used on NES)
+    ///  | |   +----------- Break Command
+    ///  | +--------------- Overflow Flag
+    ///  +----------------- Negative Flag
+    ///
+    pub struct CPUFlags:u8{
+        const CARRY             =0b0000_0001;
+        const ZERO              =0b0000_0010;
+        const INTERRUPT_DISABLE =0b0000_0100;
+        const DECIMAL_MODE      =0b0000_1000;
+        const BREAK             =0b0001_0000;
+        const BREAK2            =0b0010_0000;
+        const OVERFLOW          =0b0100_0000;
+        const NEGATIV           =0b1000_0000;
+    }
+}
+
+
 
 pub struct CPU {
     // 负载累加器
@@ -13,7 +41,7 @@ pub struct CPU {
     pub register_y: u8,
     // 这个变量可能是一个字节大小的整数，其中的每个位对应一个特定的标志位。通过将特定的位设置为 1 或 0，可以表示相应的标志位状态
     // 通过按位或操作 | 和按位与操作 &，可以根据需要设置或取消设置特定的标志位，而不需要使用多个单独的变量
-    pub status: u8,
+    pub status: CPUFlags,
     pub memory: Memory,
     // 这个相当于指令寄存器
     pub program_counter: u16,
@@ -21,6 +49,10 @@ pub struct CPU {
 
 /**
 https://www.nesdev.org/obelisk-6502-guide/reference.html
+ADC - Add with Carry
+    加进位,该指令将存储单元的内容与进位位一起添加到累加器中。如果发生溢出，则设置进位位，这使得能够执行多字节加法。
+    ADC #10 向存储累加器加10
+    操作码 $69
 LDA - Load Accumulator
     负载累加器,将内存字节加载到累加器中，并根据需要设置零和负标志.
     LDA #$c0
@@ -50,7 +82,7 @@ CPU以恒定的周期工作：
  */
 impl CPU {
     pub fn new() -> Self {
-        CPU { register_a: 0, register_x: 0, register_y: 0, status: 0, memory: Memory::default(), program_counter: 0 }
+        CPU { register_a: 0, register_x: 0, register_y: 0, status: CPUFlags::from_bits_truncate(0b0010_0100), memory: Memory::default(), program_counter: 0 }
     }
     pub fn interpret(&mut self) {
         let ref opcodes: HashMap<u8, &'static OpCode> = *OPCODE_MAP;
@@ -60,6 +92,10 @@ impl CPU {
             let opcode = opcodes.get(&ops_code).expect(&format!("Opcode {:x} is not recognized", ops_code));
 
             match ops_code {
+                //ADC
+                0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
+                    self.adc(&opcode.mode);
+                }
                 // LDA
                 0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
                     self.lda(&opcode.mode);
@@ -168,38 +204,90 @@ impl CPU {
         return ops_code;
     }
 
+    fn set_register_a(&mut self, value: u8) {
+        self.register_a = value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn set_register_x(&mut self, value: u8) {
+        self.register_x = value;
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    fn add_to_register_a_address(&mut self, data: u8) {
+        let sum = self.register_a as u16 + data as u16 +
+            (   // 进位检测
+                if self.status.contains(CPUFlags::CARRY) {
+                    1
+                } else {
+                    0
+                }
+            ) as u16;
+
+        // 进位标志
+        if sum > 0xff {
+            self.status.insert(CPUFlags::CARRY);
+        } else {
+            self.status.remove(CPUFlags::CARRY);
+        }
+
+        // 截断进位数据
+        let result = sum as u8;
+        // &的优先级是比!=高的  加括号是别误解了
+        /*
+        a:              1111_1110
+        data:           0000_1111
+        sum:       0001_0000_1101
+        result:         0000_1101
+        data ^ result   0000_0010   1
+        result ^ a      1111_0011   2
+        1 & 2           0000_0010   3
+        3 & 0x80        0000_0000
+
+         */
+        if ((data ^ result) & (result ^ self.register_a) & 0x80) != 0 {
+            self.status.insert(CPUFlags::OVERFLOW);
+        } else {
+            self.status.remove(CPUFlags::OVERFLOW);
+        }
+
+        self.set_register_a(result);
+    }
+
     fn lda(&mut self, addressing_mode: &AddressingMode) {
         let address = self.get_operand_address(addressing_mode);
-        self.register_a = self.memory_read(address);
-        self.update_zero_and_negative_flags(self.register_a);
+        self.set_register_a(self.memory_read(address));
     }
 
     fn sta(&mut self, addressing_mode: &AddressingMode) {
         let address = self.get_operand_address(addressing_mode);
-        self.memory_write(address,self.register_a);
+        self.memory_write(address, self.register_a);
     }
 
     fn tax(&mut self) {
-        self.register_x = self.register_a;
-        self.update_zero_and_negative_flags(self.register_x);
+        self.set_register_x(self.register_a);
     }
     fn inx(&mut self) {
-        self.register_x = self.register_x.wrapping_add(1);
-        self.update_zero_and_negative_flags(self.register_x);
+        self.set_register_x(self.register_x.wrapping_add(1));
     }
     fn update_zero_and_negative_flags(&mut self, result: u8) {
         // 必须根据结果设置或取消设置 CPU 标志状态。
         if result == 0 {
-            self.status = self.status | 0x02;
+            self.status.insert(CPUFlags::ZERO);
         } else {
-            self.status = self.status | 0xfd;
+            self.status.remove(CPUFlags::ZERO);
         }
 
         if result & 0x80 == 0 {
-            self.status = self.status & 0x7f;
+            self.status.remove(CPUFlags::NEGATIV);
         } else {
-            self.status = self.status | 0x80;
+            self.status.insert(CPUFlags::NEGATIV);
         }
+    }
+    fn adc(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        let val = self.memory_read(address);
+        self.add_to_register_a_address(val);
     }
 }
 
@@ -249,24 +337,100 @@ impl CPU {
     pub fn reset(&mut self) {
         self.register_a = 0;
         self.register_x = 0;
-        self.status = 0;
+        self.status = CPUFlags::from_bits_truncate(0b0010_0100);
         self.program_counter = self.memory_read_u16(0xFFFC);
     }
 
-    pub fn run_with_callback<F>(&mut self,mut callback:F)
-    where F:FnMut(&mut CPU){
-        let ref opcodes:HashMap<u8,&'static OpCode>=*OPCODE_MAP;
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+        where F: FnMut(&mut CPU) {
+        let ref opcodes: HashMap<u8, &'static OpCode> = *OPCODE_MAP;
         loop {
             callback(self);
             // match code {  }
         }
     }
-    
-    
+
+
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.memory_load_program(program);
         self.reset();
         self.interpret();
     }
-    
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_lda_immediate_load_data() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
+        assert_eq!(cpu.register_a, 0x05);
+        assert_eq!(cpu.status.contains(CPUFlags::ZERO), false);
+        assert_eq!(cpu.status.contains(CPUFlags::NEGATIV), false);
+    }
+
+    #[test]
+    fn test_lda_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
+        assert_eq!(cpu.status.contains(CPUFlags::ZERO), true);
+    }
+
+    #[test]
+    fn test_sta_immediate() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x01, 0x85, 0xff, 0x00]);
+        assert_eq!(cpu.memory_read(0xff), 0x01);
+    }
+
+    #[test]
+    fn test_sta_absolute_x() {
+        let mut cpu = CPU::new();
+        /*
+        0xa9 0x10 向负载累加器写入0x10
+        0xaa      将负载累加器的值负责到X寄存器
+        0x9d 0x00 0xff  将负载累加器的值复制到0xff10的内存位置
+        */
+        // 多字节操作数要按小端顺序写入                         // 这两个操作数要按小端顺序写入
+        cpu.load_and_run(vec![0xa9, 0x10, 0xaa, 0x9d, 0x00, 0xff, 0x00]);
+
+        assert_eq!(cpu.memory_read(0xff10), 0x10);
+    }
+
+    #[test]
+    fn test_inx_overflow() {
+        // 越界测试
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xe8, 0x00]);
+        assert_eq!(cpu.register_x, 0);
+        assert_eq!(cpu.status.contains(CPUFlags::ZERO),true);
+    }
+
+    #[test]
+    fn test_5_ops_working_together() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+
+        assert_eq!(cpu.register_x, 0xc1)
+    }
+
+    #[test]
+    fn test_write_u16() {
+        let mut cpu = CPU::new();
+        cpu.memory_write_u16(0xff00, 0x1234);
+        assert_eq!(cpu.memory.read(0xff00), 0x34);
+        assert_eq!(cpu.memory.read(0xff01), 0x12);
+    }
+
+    #[test]
+    fn test_read_u16() {
+        let x = 0x1234u16;
+        let mut cpu = CPU::new();
+        cpu.memory.write(0xff00, 0x34);
+        cpu.memory.write(0xff01, 0x12);
+        assert_eq!(cpu.memory_read_u16(0xff00), 0x1234);
+    }
 }
