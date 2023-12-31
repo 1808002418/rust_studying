@@ -5,8 +5,8 @@ use crate::memory::Memory;
 
 const PROGRAM_START_ADDRESS: u16 = 0x0600;
 
-const STACK:u16=0x0100;
-const STACK_RESET:u8=0xfd;
+const STACK: u16 = 0x0100;
+const STACK_RESET: u8 = 0xfd;
 
 bitflags! {
     /// # Status Register (P) http://wiki.nesdev.com/w/index.php/Status_flags
@@ -46,7 +46,7 @@ pub struct CPU {
     // 通过按位或操作 | 和按位与操作 &，可以根据需要设置或取消设置特定的标志位，而不需要使用多个单独的变量
     pub status: CPUFlags,
     pub memory: Memory,
-    pub stack_pointer:u8,
+    pub stack_pointer: u8,
     // 这个相当于指令寄存器
     pub program_counter: u16,
 }
@@ -363,15 +363,26 @@ impl CPU {
 }
 
 impl CPU {
-    pub fn stack_pop(&mut self)->u8{
-        self.stack_pointer =self.stack_pointer.wrapping_add(1);
-        return self.memory_read(STACK + self.stack_pointer);
+    pub fn stack_pop(&mut self) -> u8 {
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
+        return self.memory_read(STACK + self.stack_pointer as u16);
     }
 
-    pub fn stack_push(&mut self,data:u8){
+    pub fn stack_push(&mut self, data: u8) {
+        self.memory_write(STACK + self.stack_pointer as u16, data);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+    }
 
-        self.memory_write(STACK+self.stack_pointer,data);
-        self.stack_pointer=self.stack_pointer.wrapping_sub(1);
+    pub fn stack_pop_u16(&mut self) -> u16 {
+        let lo = self.stack_pop() as u16;
+        let hi = self.stack_pop() as u16;
+        return (hi << 8) | lo;
+    }
+    pub fn stack_push_u16(&mut self, data: u16) {
+        let hi = (data >> 8) as u8;
+        let oi=(data & 0xff) as u8;
+        self.stack_push(hi);
+        self.stack_push(oi);
     }
 }
 
@@ -422,7 +433,7 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xe8, 0x00]);
         assert_eq!(cpu.register_x, 0);
-        assert_eq!(cpu.status.contains(CPUFlags::ZERO),true);
+        assert_eq!(cpu.status.contains(CPUFlags::ZERO), true);
     }
 
     #[test]
@@ -448,5 +459,27 @@ mod test {
         cpu.memory.write(0xff00, 0x34);
         cpu.memory.write(0xff01, 0x12);
         assert_eq!(cpu.memory_read_u16(0xff00), 0x1234);
+    }
+}
+
+#[cfg(test)]
+mod test_stack{
+    use super::*;
+    #[test]
+    fn test_pop(){
+        let mut cpu=CPU::new();
+
+        cpu.memory_write(STACK_RESET as u16,0x12);
+        cpu.memory_write((STACK_RESET+1) as u16,0x13);
+        assert_eq!(cpu.stack_pop(),0x13);
+        assert_eq!(cpu.stack_pop(),0x12);
+
+    }
+    #[test]
+    fn test_push(){
+        let mut cpu = CPU::new();
+        cpu.stack_push(100);
+        cpu.stack_push(50);
+
     }
 }
