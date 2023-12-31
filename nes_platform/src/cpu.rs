@@ -369,6 +369,7 @@ impl CPU {
     }
 
     pub fn stack_push(&mut self, data: u8) {
+        // 从高地址往低地址写
         self.memory_write(STACK + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
@@ -380,7 +381,7 @@ impl CPU {
     }
     pub fn stack_push_u16(&mut self, data: u16) {
         let hi = (data >> 8) as u8;
-        let oi=(data & 0xff) as u8;
+        let oi = (data & 0xff) as u8;
         self.stack_push(hi);
         self.stack_push(oi);
     }
@@ -463,23 +464,39 @@ mod test {
 }
 
 #[cfg(test)]
-mod test_stack{
+mod test_stack {
     use super::*;
+
     #[test]
-    fn test_pop(){
-        let mut cpu=CPU::new();
+    fn test_pop() {
+        let mut cpu = CPU::new();
 
-        cpu.memory_write(STACK_RESET as u16,0x12);
-        cpu.memory_write((STACK_RESET+1) as u16,0x13);
-        assert_eq!(cpu.stack_pop(),0x13);
-        assert_eq!(cpu.stack_pop(),0x12);
-
+        let mut top = STACK + STACK_RESET as u16;
+        cpu.memory_write(top, 0x12);
+        top-=1;
+        cpu.memory_write(top, 0x13);
+        top-=1;
+        cpu.stack_pointer=top as u8;
+        assert_eq!(cpu.stack_pop(), 0x13);
+        assert_eq!(cpu.stack_pop(), 0x12);
     }
+
     #[test]
-    fn test_push(){
+    fn test_push() {
         let mut cpu = CPU::new();
         cpu.stack_push(100);
         cpu.stack_push(50);
+        assert_eq!(cpu.stack_pop(),50);
+        assert_eq!(cpu.stack_pop(),100);
+    }
 
+    #[test]
+    fn test_pop_u16(){
+        let mut cpu=CPU::new();
+        let mut top = STACK + STACK_RESET as u16;
+        cpu.memory_write_u16(top,0x1234);
+        top-=1;
+        cpu.stack_pointer=top as u8;
+        assert_eq!(cpu.stack_pop_u16(),0x1234);
     }
 }
