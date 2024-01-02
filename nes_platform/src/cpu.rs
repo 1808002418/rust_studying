@@ -14,12 +14,12 @@ bitflags! {
     ///  7 6 5 4 3 2 1 0
     ///  N V _ B D I Z C
     ///  | |   | | | | +--- Carry Flag
-    ///  | |   | | | +----- Zero Flag
+    ///  | |   | | | +----- Zero Flag   如果结果为零，则将零标志位设置为 1；否则，设置为 0
     ///  | |   | | +------- Interrupt Disable
     ///  | |   | +--------- Decimal Mode (not used on NES)
     ///  | |   +----------- Break Command
     ///  | +--------------- Overflow Flag
-    ///  +----------------- Negative Flag
+    ///  +----------------- Negative Flag   将结果的最高位存储到负数标志位
     ///
     pub struct CPUFlags:u8{
         const CARRY             =0b0000_0001;
@@ -57,10 +57,21 @@ ADC - Add with Carry
     加进位,该指令将存储单元的内容与进位位一起添加到累加器中。如果发生溢出，则设置进位位，这使得能够执行多字节加法。
     ADC #10 向存储累加器加10
     操作码 $69
+AND - Logical AND
+    逻辑 AND 是使用内存字节的内容逐位对累加器内容执行的。
+ORA - Logical Inclusive OR
+    使用内存字节的内容对累加器内容逐位执行包含 OR
+EOR - Exclusive OR
+    使用内存字节的内容对累加器内容逐位执行独占 OR(异或)。
+    将操作数与累加器（A 寄存器）进行异或运算,将运算结果存储回累加器。
 LDA - Load Accumulator
     负载累加器,将内存字节加载到累加器中，并根据需要设置零和负标志.
     LDA #$c0
     操作码: $A9
+LDY - Load Y Register
+    将一个字节的内存加载到 Y 寄存器中，并根据需要设置零和负标志。
+LDX - Load X Register
+    将一个字节的内存加载到 X 寄存器中，并根据需要设置零和负标志。
 TAX - Transfer Accumulator to X
     将累加器转移到 X 寄存器
     操作码: $AA
@@ -74,6 +85,13 @@ STA - Store Accumulator
     存储累加器(负载累加器),将累加器的内容存储到内存中。
     STA $2000 存储累加器的值到绝对地址 $2000
     操作码: $85
+ASL - Arithmetic Shift Left
+    算术左移.此操作将累加器或存储器内容的所有位向左移动一位。
+    位 0 设置为 0，位 7 放置在进位标志中。此操作的效果是将内存内容乘以 2（忽略 2 的补码考虑），如果结果不适合 8 位，则设置进位。
+    ASL A     ; 将累加器 A 的值左移一位
+    ASL $1234 ; 将内存地址 $1234 处的值左移一位
+    ASL X     ; 将变量 X 的值左移一位
+
  */
 
 
@@ -104,9 +122,32 @@ impl CPU {
                 0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
                     self.lda(&opcode.mode);
                 }
+                // LDA
+                0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => {
+                    self.ldy(&opcode.mode);
+                }
+                // LDX
+                0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
+                    self.ldx(&opcode.mode);
+                }
+                0x09| 0x05| 0x15| 0x0D| 0x1D| 0x19| 0x01| 0x11=>{
+                    self.ora(&opcode.mode);
+                }
+                // AND
+                0x29| 0x25| 0x35| 0x2D| 0x3D| 0x39| 0x21| 0x31=>{
+                    self.and(&opcode.mode);
+                }
+                // EOR
+                0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
+                    self.eor(&opcode.mode);
+                }
                 // STA
                 0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
                     self.sta(&opcode.mode);
+                }
+                // ASL
+                0x0A | 0x06 | 0x16 | 0x0E | 0x1E => {
+                    self.asl(&opcode.mode);
                 }
                 // TAX
                 0xAA => {
@@ -213,6 +254,11 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    fn set_register_y(&mut self, value: u8) {
+        self.register_y = value;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
     fn set_register_x(&mut self, value: u8) {
         self.register_x = value;
         self.update_zero_and_negative_flags(self.register_x);
@@ -257,10 +303,49 @@ impl CPU {
 
         self.set_register_a(result);
     }
-
+    fn asl(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        let data = self.memory_read(address);
+        if data >> 7 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag()
+        }
+        let carry_data = data << 1;
+        self.memory_write(address, carry_data);
+        self.update_zero_and_negative_flags(carry_data);
+    }
     fn lda(&mut self, addressing_mode: &AddressingMode) {
         let address = self.get_operand_address(addressing_mode);
         self.set_register_a(self.memory_read(address));
+    }
+
+    fn ldy(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        self.set_register_y(self.memory_read(address));
+    }
+
+    fn ldx(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        self.set_register_x(self.memory_read(address));
+    }
+
+    fn and(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        let data = self.memory_read(address);
+        self.set_register_x(data & self.register_a);
+    }
+
+    fn ora(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        let data = self.memory_read(address);
+        self.set_register_x(data | self.register_a);
+    }
+
+    fn eor(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        let data = self.memory_read(address);
+        self.set_register_x(data ^ self.register_a);
     }
 
     fn sta(&mut self, addressing_mode: &AddressingMode) {
@@ -292,6 +377,13 @@ impl CPU {
         let address = self.get_operand_address(addressing_mode);
         let val = self.memory_read(address);
         self.add_to_register_a_address(val);
+    }
+
+    fn set_carry_flag(&mut self) {
+        self.status.insert(CPUFlags::CARRY);
+    }
+    fn clear_carry_flag(&mut self) {
+        self.status.remove(CPUFlags::CARRY);
     }
 }
 
@@ -473,10 +565,10 @@ mod test_stack {
 
         let mut top = STACK + STACK_RESET as u16;
         cpu.memory_write(top, 0x12);
-        top-=1;
+        top -= 1;
         cpu.memory_write(top, 0x13);
-        top-=1;
-        cpu.stack_pointer=top as u8;
+        top -= 1;
+        cpu.stack_pointer = top as u8;
         assert_eq!(cpu.stack_pop(), 0x13);
         assert_eq!(cpu.stack_pop(), 0x12);
     }
@@ -486,17 +578,17 @@ mod test_stack {
         let mut cpu = CPU::new();
         cpu.stack_push(100);
         cpu.stack_push(50);
-        assert_eq!(cpu.stack_pop(),50);
-        assert_eq!(cpu.stack_pop(),100);
+        assert_eq!(cpu.stack_pop(), 50);
+        assert_eq!(cpu.stack_pop(), 100);
     }
 
     #[test]
-    fn test_pop_u16(){
-        let mut cpu=CPU::new();
+    fn test_pop_u16() {
+        let mut cpu = CPU::new();
         let mut top = STACK + STACK_RESET as u16;
-        cpu.memory_write_u16(top,0x1234);
-        top-=1;
-        cpu.stack_pointer=top as u8;
-        assert_eq!(cpu.stack_pop_u16(),0x1234);
+        cpu.memory_write_u16(top, 0x1234);
+        top -= 1;
+        cpu.stack_pointer = top as u8;
+        assert_eq!(cpu.stack_pop_u16(), 0x1234);
     }
 }

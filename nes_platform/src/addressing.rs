@@ -52,8 +52,8 @@ pub struct OpCode {
     操作数的长度,不包含指令本身
     TAX 长度为0
     LDA 0x11 长度就是1
-    */
-    pub operand_len:u8,
+     */
+    pub operand_len: u8,
     /**
     "周期"（Cycles）是指完成一个特定指令或操作所需的时间单位。它通常用于描述处理器的时钟周期数或指令执行的时间。
     每个处理器的时钟周期长度是固定的，它定义了处理器的基本时钟速度。指令的执行时间可以通过时钟周期数来度量。例如，如果一个指令需要 4 个时钟周期才能完成执行，那么它的周期数就是 4。
@@ -64,7 +64,7 @@ pub struct OpCode {
 
 impl OpCode {
     fn new(code: u8, mnemonic: &'static str, len: u8, cycles: u8, mode: AddressingMode) -> Self {
-        return OpCode { code, mnemonic, len, operand_len: len-1, cycles, mode };
+        return OpCode { code, mnemonic, len, operand_len: len - 1, cycles, mode };
     }
 }
 
@@ -91,6 +91,45 @@ lazy_static! {
         OpCode::new(0xA1, "LDA", 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0xB1, "LDA", 2, 5/*+1 if page crossed*/, AddressingMode::Indirect_Y),
 
+        OpCode::new(0xA0,"LDY",2,2,AddressingMode::Immediate),
+        OpCode::new(0xA4,"LDY",2,3,AddressingMode::ZeroPage),
+        OpCode::new(0xB4,"LDY",2,4,AddressingMode::ZeroPage_X),
+        OpCode::new(0xAC,"LDY",3,4,AddressingMode::Absolute),
+        OpCode::new(0xBC,"LDY",3,4,AddressingMode::Absolute_X),
+
+        OpCode::new(0xA2,"LDX",2,2,AddressingMode::Immediate),
+        OpCode::new(0xA6,"LDX",2,3,AddressingMode::ZeroPage),
+        OpCode::new(0xB6,"LDX",2,4,AddressingMode::ZeroPage_Y),
+        OpCode::new(0xAE,"LDX",3,4,AddressingMode::Absolute),
+        OpCode::new(0xBE,"LDX",3,4,AddressingMode::Absolute_Y),
+
+        OpCode::new(0x29,"AND",2,2,AddressingMode::Immediate),
+        OpCode::new(0x25,"AND",2,3,AddressingMode::ZeroPage),
+        OpCode::new(0x35,"AND",2,4,AddressingMode::ZeroPage_X),
+        OpCode::new(0x2D,"AND",3,4,AddressingMode::Absolute),
+        OpCode::new(0x3D,"AND",3,4,AddressingMode::Absolute_X),
+        OpCode::new(0x39,"AND",3,4,AddressingMode::Absolute_Y),
+        OpCode::new(0x21,"AND",2,6,AddressingMode::Indirect_X),
+        OpCode::new(0x31,"AND",2,5,AddressingMode::Indirect_Y),
+
+        OpCode::new(0x09,"ORA",2,2,AddressingMode::Immediate),
+        OpCode::new(0x05,"ORA",2,3,AddressingMode::ZeroPage),
+        OpCode::new(0x15,"ORA",2,4,AddressingMode::ZeroPage_X),
+        OpCode::new(0x0D,"ORA",3,4,AddressingMode::Absolute),
+        OpCode::new(0x1D,"ORA",3,4,AddressingMode::Absolute_X),
+        OpCode::new(0x19,"ORA",3,4,AddressingMode::Absolute_Y),
+        OpCode::new(0x01,"ORA",2,6,AddressingMode::Indirect_X),
+        OpCode::new(0x11,"ORA",2,5,AddressingMode::Indirect_Y),
+
+        OpCode::new(0x49,"EOR",2,2,AddressingMode::Immediate),
+        OpCode::new(0x45,"EOR",2,3,AddressingMode::ZeroPage),
+        OpCode::new(0x55,"EOR",2,4,AddressingMode::ZeroPage_Y),
+        OpCode::new(0x4D,"EOR",3,4,AddressingMode::Absolute),
+        OpCode::new(0x5D,"EOR",3,4,AddressingMode::Absolute_X),
+        OpCode::new(0x59,"EOR",3,4,AddressingMode::Absolute_Y),
+        OpCode::new(0x41,"EOR",2,6,AddressingMode::Indirect_X),
+        OpCode::new(0x51,"EOR",2,5,AddressingMode::Indirect_Y),
+
         OpCode::new(0x85, "STA", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x95, "STA", 2, 4, AddressingMode::ZeroPage_X),
         OpCode::new(0x8D, "STA", 3, 4, AddressingMode::Absolute),
@@ -109,6 +148,12 @@ lazy_static! {
         OpCode::new(0x79, "ADC", 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0x61, "ADC", 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0x71, "ADC", 2, 5, AddressingMode::Indirect_Y),
+
+        OpCode::new(0x0A,"ASL",1,1,AddressingMode::NoneAddressing),
+        OpCode::new(0x06,"ASL",2,2,AddressingMode::ZeroPage),
+        OpCode::new(0x16,"ASL",2,2,AddressingMode::ZeroPage_X),
+        OpCode::new(0x0E,"ASL",3,3,AddressingMode::Absolute),
+        OpCode::new(0x1E,"ASL",3,4,AddressingMode::Absolute_X),
     ];
 
     pub static ref OPCODE_MAP:HashMap<u8,&'static OpCode>={
