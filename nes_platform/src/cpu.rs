@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use bitflags::bitflags;
-use crate::addressing::{AddressingMode, OpCode, OPCODE_MAP};
+use crate::instruction::addressing::{AddressingMode, OpCode, OPCODE_MAP};
 use crate::memory::Memory;
 
 const PROGRAM_START_ADDRESS: u16 = 0x0600;
@@ -13,12 +13,12 @@ bitflags! {
     ///
     ///  7 6 5 4 3 2 1 0
     ///  N V _ B D I Z C
-    ///  | |   | | | | +--- Carry Flag
+    ///  | |   | | | | +--- Carry Flag  如果减法运算中没有借位，则进位标志位被设置为 1；否则，设置为 0。
     ///  | |   | | | +----- Zero Flag   如果结果为零，则将零标志位设置为 1；否则，设置为 0
     ///  | |   | | +------- Interrupt Disable
     ///  | |   | +--------- Decimal Mode (not used on NES)
     ///  | |   +----------- Break Command
-    ///  | +--------------- Overflow Flag
+    ///  | +--------------- Overflow Flag   根据减法运算的结果判断是否发生溢出。如果溢出了，则溢出标志位被设置为 1；否则，设置为 0。
     ///  +----------------- Negative Flag   将结果的最高位存储到负数标志位
     ///
     pub struct CPUFlags:u8{
@@ -78,6 +78,8 @@ TAX - Transfer Accumulator to X
 INX - Increment X Register
     将 X 寄存器加 1，根据需要设置零和负标志
     操作码: $E8
+INY - Increment Y Register
+    将 Y 寄存器加 1，根据需要设置零和负标志
 BRK - Force Interrupt
     强制中断
     操作码: $00
@@ -91,7 +93,11 @@ ASL - Arithmetic Shift Left
     ASL A     ; 将累加器 A 的值左移一位
     ASL $1234 ; 将内存地址 $1234 处的值左移一位
     ASL X     ; 将变量 X 的值左移一位
-
+LSR - Logical Shift Right
+    A 或 M 中的每个位都向右移动一位。位 0 中的位被移入进位标志。位 7 设置为零。
+SBC - Subtract with Carry
+    该指令将内存位置的内容连同进位的位数一起减到累加器中。如果发生溢出，进位清除，这允许执行多字节减法。
+    从累加器（A 寄存器）中减去操作数的值以及进位标志位（C）的值,将结果存储回累加器
  */
 
 
@@ -114,7 +120,7 @@ impl CPU {
             let opcode = opcodes.get(&ops_code).expect(&format!("Opcode {:x} is not recognized", ops_code));
 
             match ops_code {
-                //ADC
+                // ADC
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
                 }
@@ -130,6 +136,7 @@ impl CPU {
                 0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
                     self.ldx(&opcode.mode);
                 }
+                // ORA
                 0x09| 0x05| 0x15| 0x0D| 0x1D| 0x19| 0x01| 0x11=>{
                     self.ora(&opcode.mode);
                 }
@@ -149,6 +156,10 @@ impl CPU {
                 0x0A | 0x06 | 0x16 | 0x0E | 0x1E => {
                     self.asl(&opcode.mode);
                 }
+                // SBC
+                0xE9| 0xE5| 0xF5| 0xED| 0xFD| 0xF9| 0xE1| 0xF1=>{
+                    self.sbc(&opcode.mode);
+                }
                 // TAX
                 0xAA => {
                     self.tax();
@@ -156,6 +167,10 @@ impl CPU {
                 // INX
                 0xE8 => {
                     self.inx();
+                }
+                // INY
+                0xC8 => {
+                    self.iny();
                 }
                 // BRK
                 0x00 => {
@@ -320,6 +335,14 @@ impl CPU {
         self.set_register_a(self.memory_read(address));
     }
 
+    fn sbc(&mut self, addressing_mode: &AddressingMode) {
+        let address = self.get_operand_address(addressing_mode);
+        let data = self.memory_read(address);
+        self.add_to_register_a_address(
+          data.wrapping_neg().wrapping_sub(1)
+        );
+    }
+
     fn ldy(&mut self, addressing_mode: &AddressingMode) {
         let address = self.get_operand_address(addressing_mode);
         self.set_register_y(self.memory_read(address));
@@ -358,6 +381,9 @@ impl CPU {
     }
     fn inx(&mut self) {
         self.set_register_x(self.register_x.wrapping_add(1));
+    }
+    fn iny(&mut self) {
+        self.set_register_y(self.register_y.wrapping_add(1));
     }
     fn update_zero_and_negative_flags(&mut self, result: u8) {
         // 必须根据结果设置或取消设置 CPU 标志状态。

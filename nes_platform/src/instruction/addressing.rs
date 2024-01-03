@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use lazy_static::lazy_static;
+use crate::cpu::CPU;
+use crate::instruction::TAX;
 
 /**
 这是一个针对CPU指令集中的寻址模式（Addressing Mode）的枚举定义。在计算机体系结构中，寻址模式用于指定如何计算或获取操作数（数据）的地址。下面是对每种寻址模式的解释：
@@ -60,19 +62,69 @@ pub struct OpCode {
      */
     pub cycles: u8,
     pub mode: AddressingMode,
+    pub exec: Box<dyn Fn(&mut CPU, &AddressingMode)>,
 }
 
 impl OpCode {
-    fn new(code: u8, mnemonic: &'static str, len: u8, cycles: u8, mode: AddressingMode) -> Self {
-        return OpCode { code, mnemonic, len, operand_len: len - 1, cycles, mode };
+    fn new(code: u8,
+           mnemonic: &'static str,
+           len: u8,
+           cycles: u8,
+           mode: AddressingMode,
+           exec: Box<dyn Fn(&mut CPU, &AddressingMode)>) -> Self {
+        return OpCode { code, mnemonic, len, operand_len: len - 1, cycles, mode, exec };
     }
 }
 
 lazy_static! {
     pub static ref CPU_OPS_CODES:Vec<OpCode>=vec![
         OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
-        OpCode::new(0xAA, "TAX", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xAA, "TAX", 1, 2, AddressingMode::NoneAddressing,Box::new(TAX::tax)),
         OpCode::new(0xE8, "INX", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xC8, "INY", 1, 2, AddressingMode::NoneAddressing),
+
+        OpCode::new(0xe6, "INC", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0xf6, "INC", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0xee, "INC", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0xfe, "INC", 3, 7, AddressingMode::Absolute_X),
+
+        OpCode::new(0xc6, "DEC", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0xd6, "DEC", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0xce, "DEC", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0xde, "DEC", 3, 7, AddressingMode::Absolute_X),
+
+        OpCode::new(0xca, "DEX", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x88, "DEY", 1, 2, AddressingMode::NoneAddressing),
+
+        OpCode::new(0xc9, "CMP", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xc5, "CMP", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xd5, "CMP", 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0xcd, "CMP", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0xdd, "CMP", 3, 4/*+1 if page crossed*/, AddressingMode::Absolute_X),
+        OpCode::new(0xd9, "CMP", 3, 4/*+1 if page crossed*/, AddressingMode::Absolute_Y),
+        OpCode::new(0xc1, "CMP", 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0xd1, "CMP", 2, 5/*+1 if page crossed*/, AddressingMode::Indirect_Y),
+
+        OpCode::new(0xc0, "CPY", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xc4, "CPY", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xcc, "CPY", 3, 4, AddressingMode::Absolute),
+
+        OpCode::new(0xe0, "CPX", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xe4, "CPX", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xec, "CPX", 3, 4, AddressingMode::Absolute),
+
+
+        /* Branching */
+
+        OpCode::new(0x4c, "JMP", 3, 3, AddressingMode::NoneAddressing), //AddressingMode that acts as Immidiate
+        OpCode::new(0x6c, "JMP", 3, 5, AddressingMode::NoneAddressing), //AddressingMode:Indirect with 6502 bug
+
+        OpCode::new(0x20, "JSR", 3, 6, AddressingMode::NoneAddressing),
+        OpCode::new(0x60, "RTS", 1, 6, AddressingMode::NoneAddressing),
+
+        OpCode::new(0x40, "RTI", 1, 6, AddressingMode::NoneAddressing),
+
+
 
         OpCode::new(0xA9, "LDA", 2, 2, AddressingMode::Immediate),
         OpCode::new(0xA5, "LDA", 2, 3, AddressingMode::ZeroPage),
@@ -149,11 +201,38 @@ lazy_static! {
         OpCode::new(0x61, "ADC", 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0x71, "ADC", 2, 5, AddressingMode::Indirect_Y),
 
-        OpCode::new(0x0A,"ASL",1,1,AddressingMode::NoneAddressing),
-        OpCode::new(0x06,"ASL",2,2,AddressingMode::ZeroPage),
-        OpCode::new(0x16,"ASL",2,2,AddressingMode::ZeroPage_X),
-        OpCode::new(0x0E,"ASL",3,3,AddressingMode::Absolute),
-        OpCode::new(0x1E,"ASL",3,4,AddressingMode::Absolute_X),
+        OpCode::new(0x2a, "ROL", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x26, "ROL", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x36, "ROL", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x2e, "ROL", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x3e, "ROL", 3, 7, AddressingMode::Absolute_X),
+
+        OpCode::new(0x6a, "ROR", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x66, "ROR", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x76, "ROR", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x6e, "ROR", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x7e, "ROR", 3, 7, AddressingMode::Absolute_X),
+
+        OpCode::new(0x0A,"ASL",1,2,AddressingMode::NoneAddressing),
+        OpCode::new(0x06,"ASL",2,5,AddressingMode::ZeroPage),
+        OpCode::new(0x16,"ASL",2,6,AddressingMode::ZeroPage_X),
+        OpCode::new(0x0E,"ASL",3,6,AddressingMode::Absolute),
+        OpCode::new(0x1E,"ASL",3,7,AddressingMode::Absolute_X),
+
+        OpCode::new(0x4A,"LSR",1,2,AddressingMode::NoneAddressing),
+        OpCode::new(0x46,"LSR",2,5,AddressingMode::ZeroPage),
+        OpCode::new(0x56,"LSR",2,6,AddressingMode::ZeroPage_X),
+        OpCode::new(0x4E,"LSR",3,6,AddressingMode::Absolute),
+        OpCode::new(0x5E,"LSR",3,7,AddressingMode::Absolute_X),
+
+        OpCode::new(0xE9,"SBC",2,2,AddressingMode::Immediate),
+        OpCode::new(0xE5,"SBC",2,3,AddressingMode::ZeroPage),
+        OpCode::new(0xF5,"SBC",2,4,AddressingMode::ZeroPage_X),
+        OpCode::new(0xED,"SBC",3,4,AddressingMode::Absolute),
+        OpCode::new(0xFD,"SBC",3,4,AddressingMode::Absolute_X),
+        OpCode::new(0xF9,"SBC",3,4,AddressingMode::Absolute_Y),
+        OpCode::new(0xE1,"SBC",2,6,AddressingMode::Indirect_X),
+        OpCode::new(0xF1,"SBC",2,5,AddressingMode::Indirect_Y),
     ];
 
     pub static ref OPCODE_MAP:HashMap<u8,&'static OpCode>={
