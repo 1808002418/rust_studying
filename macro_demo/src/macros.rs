@@ -11,3 +11,15 @@ macro_rules! add {
         $(+ $element)*
     };
 }
+
+#[macro_export]
+macro_rules! invoke {
+    ($method:ident) => {
+        // 用不了，先放着。
+        crate::macros::$method();
+    };
+}
+
+pub fn test(){
+    println!("TEST")
+}

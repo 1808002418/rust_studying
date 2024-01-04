@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use bitflags::bitflags;
 use crate::instruction::addressing::{AddressingMode, OpCode, OPCODE_MAP};
+use crate::invoke_module_method;
 use crate::memory::Memory;
 
 const PROGRAM_START_ADDRESS: u16 = 0x0600;
@@ -31,9 +32,8 @@ bitflags! {
         const OVERFLOW          =0b0100_0000;
         const NEGATIV           =0b1000_0000;
     }
+
 }
-
-
 
 pub struct CPU {
     // 负载累加器
@@ -118,66 +118,71 @@ impl CPU {
         loop {
             let ops_code = self.offset_program();
             let opcode = opcodes.get(&ops_code).expect(&format!("Opcode {:x} is not recognized", ops_code));
-
-            match ops_code {
-                // ADC
-                0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
-                    self.adc(&opcode.mode);
-                }
-                // LDA
-                0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
-                    self.lda(&opcode.mode);
-                }
-                // LDA
-                0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => {
-                    self.ldy(&opcode.mode);
-                }
-                // LDX
-                0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
-                    self.ldx(&opcode.mode);
-                }
-                // ORA
-                0x09| 0x05| 0x15| 0x0D| 0x1D| 0x19| 0x01| 0x11=>{
-                    self.ora(&opcode.mode);
-                }
-                // AND
-                0x29| 0x25| 0x35| 0x2D| 0x3D| 0x39| 0x21| 0x31=>{
-                    self.and(&opcode.mode);
-                }
-                // EOR
-                0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
-                    self.eor(&opcode.mode);
-                }
-                // STA
-                0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
-                    self.sta(&opcode.mode);
-                }
-                // ASL
-                0x0A | 0x06 | 0x16 | 0x0E | 0x1E => {
-                    self.asl(&opcode.mode);
-                }
-                // SBC
-                0xE9| 0xE5| 0xF5| 0xED| 0xFD| 0xF9| 0xE1| 0xF1=>{
-                    self.sbc(&opcode.mode);
-                }
-                // TAX
-                0xAA => {
-                    self.tax();
-                }
-                // INX
-                0xE8 => {
-                    self.inx();
-                }
-                // INY
-                0xC8 => {
-                    self.iny();
-                }
-                // BRK
-                0x00 => {
-                    return;
-                }
-                _ => {}
-            }
+            invoke_module_method!(
+                opcode.mnemonic,
+                opcode.mnemonic.to_lowercase(),
+                self,
+                &opcode.mode
+            );
+            /*            match ops_code {
+                            // ADC
+                            0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
+                                self.adc(&opcode.mode);
+                            }
+                            // LDA
+                            0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
+                                self.lda(&opcode.mode);
+                            }
+                            // LDA
+                            0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => {
+                                self.ldy(&opcode.mode);
+                            }
+                            // LDX
+                            0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
+                                self.ldx(&opcode.mode);
+                            }
+                            // ORA
+                            0x09| 0x05| 0x15| 0x0D| 0x1D| 0x19| 0x01| 0x11=>{
+                                self.ora(&opcode.mode);
+                            }
+                            // AND
+                            0x29| 0x25| 0x35| 0x2D| 0x3D| 0x39| 0x21| 0x31=>{
+                                self.and(&opcode.mode);
+                            }
+                            // EOR
+                            0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
+                                self.eor(&opcode.mode);
+                            }
+                            // STA
+                            0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
+                                self.sta(&opcode.mode);
+                            }
+                            // ASL
+                            0x0A | 0x06 | 0x16 | 0x0E | 0x1E => {
+                                self.asl(&opcode.mode);
+                            }
+                            // SBC
+                            0xE9| 0xE5| 0xF5| 0xED| 0xFD| 0xF9| 0xE1| 0xF1=>{
+                                self.sbc(&opcode.mode);
+                            }
+                            // TAX
+                            0xAA => {
+                                self.tax();
+                            }
+                            // INX
+                            0xE8 => {
+                                self.inx();
+                            }
+                            // INY
+                            0xC8 => {
+                                self.iny();
+                            }
+                            // BRK
+                            0x00 => {
+                                return;
+                            }
+                            _ => {}
+                        }*/
             // 操作数偏移
             self.program_counter += opcode.operand_len as u16;
         }
@@ -186,7 +191,7 @@ impl CPU {
     /*
     通过寻址方式获取到操作数的内存地址,不负责修改程序段偏移
      */
-    fn get_operand_address(&mut self, addressing_mode: &AddressingMode) -> u16 {
+    pub fn get_operand_address(&mut self, addressing_mode: &AddressingMode) -> u16 {
         return match addressing_mode {
             /*
             Immediate: 立即寻址模式。操作数直接包含在指令中，例如：LDA #10，表示将值10加载到累加器（Accumulator）寄存器中。
@@ -264,22 +269,7 @@ impl CPU {
         return ops_code;
     }
 
-    fn set_register_a(&mut self, value: u8) {
-        self.register_a = value;
-        self.update_zero_and_negative_flags(self.register_a);
-    }
-
-    fn set_register_y(&mut self, value: u8) {
-        self.register_y = value;
-        self.update_zero_and_negative_flags(self.register_y);
-    }
-
-    fn set_register_x(&mut self, value: u8) {
-        self.register_x = value;
-        self.update_zero_and_negative_flags(self.register_x);
-    }
-
-    fn add_to_register_a_address(&mut self, data: u8) {
+    pub fn add_to_register_a_address(&mut self, data: u8) {
         let sum = self.register_a as u16 + data as u16 +
             (   // 进位检测
                 if self.status.contains(CPUFlags::CARRY) {
@@ -291,9 +281,9 @@ impl CPU {
 
         // 进位标志
         if sum > 0xff {
-            self.status.insert(CPUFlags::CARRY);
+            self.set_carry_flag();
         } else {
-            self.status.remove(CPUFlags::CARRY);
+            self.clear_carry_flag();
         }
 
         // 截断进位数据
@@ -311,105 +301,77 @@ impl CPU {
 
          */
         if ((data ^ result) & (result ^ self.register_a) & 0x80) != 0 {
-            self.status.insert(CPUFlags::OVERFLOW);
+            self.set_overflow_flag();
         } else {
-            self.status.remove(CPUFlags::OVERFLOW);
+            self.clear_overflow_flag();
         }
 
         self.set_register_a(result);
     }
-    fn asl(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        let data = self.memory_read(address);
-        if data >> 7 == 1 {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag()
-        }
-        let carry_data = data << 1;
-        self.memory_write(address, carry_data);
-        self.update_zero_and_negative_flags(carry_data);
-    }
-    fn lda(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        self.set_register_a(self.memory_read(address));
-    }
 
-    fn sbc(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        let data = self.memory_read(address);
-        self.add_to_register_a_address(
-          data.wrapping_neg().wrapping_sub(1)
-        );
-    }
-
-    fn ldy(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        self.set_register_y(self.memory_read(address));
-    }
-
-    fn ldx(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        self.set_register_x(self.memory_read(address));
-    }
-
-    fn and(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        let data = self.memory_read(address);
-        self.set_register_x(data & self.register_a);
-    }
-
-    fn ora(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        let data = self.memory_read(address);
-        self.set_register_x(data | self.register_a);
-    }
-
-    fn eor(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        let data = self.memory_read(address);
-        self.set_register_x(data ^ self.register_a);
-    }
-
-    fn sta(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        self.memory_write(address, self.register_a);
-    }
-
-    fn tax(&mut self) {
-        self.set_register_x(self.register_a);
-    }
-    fn inx(&mut self) {
-        self.set_register_x(self.register_x.wrapping_add(1));
-    }
-    fn iny(&mut self) {
-        self.set_register_y(self.register_y.wrapping_add(1));
-    }
-    fn update_zero_and_negative_flags(&mut self, result: u8) {
+    pub fn update_zero_and_negative_flags(&mut self, result: u8) {
         // 必须根据结果设置或取消设置 CPU 标志状态。
         if result == 0 {
-            self.status.insert(CPUFlags::ZERO);
+            self.set_zero_flag();
         } else {
-            self.status.remove(CPUFlags::ZERO);
+            self.clear_zero_flag()
         }
 
         if result & 0x80 == 0 {
-            self.status.remove(CPUFlags::NEGATIV);
+            self.clear_negative_flag()
         } else {
-            self.status.insert(CPUFlags::NEGATIV);
+            self.set_negative_flag();
         }
     }
-    fn adc(&mut self, addressing_mode: &AddressingMode) {
-        let address = self.get_operand_address(addressing_mode);
-        let val = self.memory_read(address);
-        self.add_to_register_a_address(val);
-    }
+}
 
-    fn set_carry_flag(&mut self) {
+impl CPU {
+    pub fn set_carry_flag(&mut self) {
         self.status.insert(CPUFlags::CARRY);
     }
-    fn clear_carry_flag(&mut self) {
+    pub fn clear_carry_flag(&mut self) {
         self.status.remove(CPUFlags::CARRY);
+    }
+
+    pub fn set_zero_flag(&mut self) {
+        self.status.insert(CPUFlags::ZERO);
+    }
+
+    pub fn clear_zero_flag(&mut self) {
+        self.status.remove(CPUFlags::ZERO);
+    }
+
+    pub fn set_overflow_flag(&mut self) {
+        self.status.insert(CPUFlags::OVERFLOW);
+    }
+
+    pub fn clear_overflow_flag(&mut self) {
+        self.status.remove(CPUFlags::OVERFLOW);
+    }
+
+    pub fn set_negative_flag(&mut self) {
+        self.status.insert(CPUFlags::NEGATIV);
+    }
+
+    pub fn clear_negative_flag(&mut self) {
+        self.status.remove(CPUFlags::NEGATIV);
+    }
+}
+
+impl CPU {
+    pub fn set_register_a(&mut self, value: u8) {
+        self.register_a = value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    pub fn set_register_y(&mut self, value: u8) {
+        self.register_y = value;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
+    pub fn set_register_x(&mut self, value: u8) {
+        self.register_x = value;
+        self.update_zero_and_negative_flags(self.register_x);
     }
 }
 

@@ -62,24 +62,18 @@ pub struct OpCode {
      */
     pub cycles: u8,
     pub mode: AddressingMode,
-    pub exec: Box<dyn Fn(&mut CPU, &AddressingMode)>,
 }
 
 impl OpCode {
-    fn new(code: u8,
-           mnemonic: &'static str,
-           len: u8,
-           cycles: u8,
-           mode: AddressingMode,
-           exec: Box<dyn Fn(&mut CPU, &AddressingMode)>) -> Self {
-        return OpCode { code, mnemonic, len, operand_len: len - 1, cycles, mode, exec };
+    fn new(code: u8, mnemonic: &'static str, len: u8, cycles: u8, mode: AddressingMode) -> Self {
+        return OpCode { code, mnemonic, len, operand_len: len - 1, cycles, mode };
     }
 }
 
 lazy_static! {
     pub static ref CPU_OPS_CODES:Vec<OpCode>=vec![
         OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
-        OpCode::new(0xAA, "TAX", 1, 2, AddressingMode::NoneAddressing,Box::new(TAX::tax)),
+        OpCode::new(0xAA, "TAX", 1, 2, AddressingMode::NoneAddressing),
         OpCode::new(0xE8, "INX", 1, 2, AddressingMode::NoneAddressing),
         OpCode::new(0xC8, "INY", 1, 2, AddressingMode::NoneAddressing),
 

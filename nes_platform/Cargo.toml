@@ -12,3 +12,4 @@ bitflags = "1.2.1"
 
 sdl2 = "0.36.0"
 rand = "=0.7.3"
+dispatch = "0.2.0"
