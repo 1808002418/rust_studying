@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+
 use bitflags::bitflags;
-use crate::instruction::addressing::{AddressingMode, OpCode, OPCODE_MAP};
-use crate::invoke_module_method;
+
+use crate::instruction::{CPU_INSTRUCTION_BUILTIN_MAP, InstructionBuiltin};
+use crate::instruction::addressing::AddressingMode;
 use crate::memory::Memory;
 
 const PROGRAM_START_ADDRESS: u16 = 0x0600;
@@ -113,78 +115,23 @@ impl CPU {
         CPU { register_a: 0, register_x: 0, register_y: 0, status: CPUFlags::from_bits_truncate(0b0010_0100), memory: Memory::default(), stack_pointer: STACK_RESET, program_counter: 0 }
     }
     pub fn interpret(&mut self) {
-        let ref opcodes: HashMap<u8, &'static OpCode> = *OPCODE_MAP;
+        let ref builtins: HashMap<u8, &'static InstructionBuiltin> = *CPU_INSTRUCTION_BUILTIN_MAP;
 
         loop {
             let ops_code = self.offset_program();
-            let opcode = opcodes.get(&ops_code).expect(&format!("Opcode {:x} is not recognized", ops_code));
-            invoke_module_method!(
-                opcode.mnemonic,
-                opcode.mnemonic.to_lowercase(),
-                self,
-                &opcode.mode
-            );
-            /*            match ops_code {
-                            // ADC
-                            0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
-                                self.adc(&opcode.mode);
-                            }
-                            // LDA
-                            0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
-                                self.lda(&opcode.mode);
-                            }
-                            // LDA
-                            0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => {
-                                self.ldy(&opcode.mode);
-                            }
-                            // LDX
-                            0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
-                                self.ldx(&opcode.mode);
-                            }
-                            // ORA
-                            0x09| 0x05| 0x15| 0x0D| 0x1D| 0x19| 0x01| 0x11=>{
-                                self.ora(&opcode.mode);
-                            }
-                            // AND
-                            0x29| 0x25| 0x35| 0x2D| 0x3D| 0x39| 0x21| 0x31=>{
-                                self.and(&opcode.mode);
-                            }
-                            // EOR
-                            0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
-                                self.eor(&opcode.mode);
-                            }
-                            // STA
-                            0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => {
-                                self.sta(&opcode.mode);
-                            }
-                            // ASL
-                            0x0A | 0x06 | 0x16 | 0x0E | 0x1E => {
-                                self.asl(&opcode.mode);
-                            }
-                            // SBC
-                            0xE9| 0xE5| 0xF5| 0xED| 0xFD| 0xF9| 0xE1| 0xF1=>{
-                                self.sbc(&opcode.mode);
-                            }
-                            // TAX
-                            0xAA => {
-                                self.tax();
-                            }
-                            // INX
-                            0xE8 => {
-                                self.inx();
-                            }
-                            // INY
-                            0xC8 => {
-                                self.iny();
-                            }
-                            // BRK
-                            0x00 => {
-                                return;
-                            }
-                            _ => {}
-                        }*/
+            let builtin = builtins.get(&ops_code).expect(&format!("Opcode {:x} is not recognized", ops_code));
+            match ops_code {
+                // BRK
+                0x00 => {
+                    return;
+                }
+                _ => {
+                    (builtin.execute)(self, &builtin.op.mode);
+                }
+            }
+
             // 操作数偏移
-            self.program_counter += opcode.operand_len as u16;
+            self.program_counter += builtin.op.operand_len as u16;
         }
     }
 
@@ -427,11 +374,12 @@ impl CPU {
 
     pub fn run_with_callback<F>(&mut self, mut callback: F)
         where F: FnMut(&mut CPU) {
-        let ref opcodes: HashMap<u8, &'static OpCode> = *OPCODE_MAP;
-        loop {
-            callback(self);
-            // match code {  }
-        }
+        todo!();
+/*                let ref opcodes: HashMap<u8, &'static OpCode> = *CPU_INSTRUCTION_BUILTIN_MAP;
+                loop {
+                    callback(self);
+                    // match code {  }
+                }*/
     }
 
 

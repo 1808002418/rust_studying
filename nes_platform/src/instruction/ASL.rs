@@ -1,7 +1,7 @@
 use crate::cpu::CPU;
 use crate::instruction::addressing::AddressingMode;
 
-fn asl(cpu: &mut CPU, addressing_mode: &AddressingMode) {
+pub(crate) fn asl(cpu: &mut CPU, addressing_mode: &AddressingMode) {
     let address = cpu.get_operand_address(addressing_mode);
     let data = cpu.memory_read(address);
     if data >> 7 == 1 {
